@@ -154,6 +154,9 @@ int main(int ac, char **av)
             solverMaster -> printv();
         } 
         
+        int Px = vm["Px"].as<int>();
+        int Py = vm["Py"].as<int>();
+        
         // Creat object for each subdomain - addd parameters which are common to all subdomains
         LidDrivenCavity* solver = new LidDrivenCavity();
         solver -> SetTimeStep(vm["dt"].as<double>());
@@ -170,18 +173,52 @@ int main(int ac, char **av)
         MPI_Cart_create(MPI_COMM_WORLD, dims, sizes , periods, 0, &mygrid);
     
         // get coordinates for each rank
-        int coords[dims];
-        MPI_Cart_coords(mygrid, rank, dims, coords);
+        int coord[dims];
+        MPI_Cart_coords(mygrid, rank, dims, coord);
         
         //get sizes of each domain
-        int Nx_sub = ceil( (1.0 * vm["Nx"].as<int>()/vm["Px"].as<int>()) );  
-        int Ny_sub = ceil( (1.0*vm["Ny"].as<int>()/vm["Py"].as<int>()) )
-        int Nx_last = vm["Nx"].as<int>() - (vm["Px"].as<int>()-1) * Nx_sub;      // last domain takes over leftover points
-        int Ny_last = vm["Ny"].as<int>() - (vm["Py"].as<int>()-1) * Ny_sub;*/
+        int Nx_sub = ceil( (1.0 * vm["Nx"].as<int>()/vm["Px"].as<int>()) ) +2;  // 2 added for boundary points  
+        int Ny_sub = ceil( (1.0*vm["Ny"].as<int>()/vm["Py"].as<int>()) ) + 2;
+        int Nx_last = vm["Nx"].as<int>() - (vm["Px"].as<int>()-1) * (Nx_sub-2) +1;      // last domain takes over leftover points
+        int Ny_last = vm["Ny"].as<int>() - (vm["Py"].as<int>()-1) * (Ny_sub-2) +1;
+        
+        
         
         // add elements depending on the position in the cartesian grid
-       
-       
+        int rank_com;
+        MPI_Comm_rank(MPI_COMM_WORLD, &rank_com);
+        int Nx;
+        int Ny;
+        
+        if ( coord[0] == (Py -1)  )
+        {
+            Ny = Ny_last;
+        }
+        else
+        {
+            Ny = Ny_sub;
+        }
+        
+        if ( coord[1] == (Px -1) ) 
+        {
+            Nx = Nx_last;
+        }
+        else
+        {
+            Nx = Nx_sub;
+        }
+        
+        if (coord[0] == 0)
+        {
+            Ny -= 1;
+        }
+        
+        if (coord[1] == 0)
+        {
+            Nx -= 1;
+        }
+        
+        cout << "coordinates: " << coord[0] << ", " << coord[1] << "size" << Nx << ":" << Ny <<endl;
         
                 
 
