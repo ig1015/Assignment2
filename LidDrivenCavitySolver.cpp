@@ -154,8 +154,41 @@ int main(int ac, char **av)
             solverMaster -> printv();
         } 
         
+        // Creat object for each subdomain - addd parameters which are common to all subdomains
+        LidDrivenCavity* solver = new LidDrivenCavity();
+        solver -> SetTimeStep(vm["dt"].as<double>());
+        solver -> SetFinalTime(vm["T"].as<double>());
+        solver -> SetReynoldsNumber(vm["Re"].as<double>());
+        
+       
+        
+        // Create cartesian grid
+        MPI_Comm mygrid;
+        const int dims = 2;
+        int sizes[dims] = {vm["Py"].as<int>(), vm["Px"].as<int>()};
+        int periods[dims] = {0,0};
+        MPI_Cart_create(MPI_COMM_WORLD, dims, sizes , periods, 0, &mygrid);
+    
+        // get coordinates for each rank
+        int coords[dims];
+        MPI_Cart_coords(mygrid, rank, dims, coords);
+        
+        //get sizes of each domain
+        int Nx_sub = ceil( (1.0 * vm["Nx"].as<int>()/vm["Px"].as<int>()) );  
+        int Ny_sub = ceil( (1.0*vm["Ny"].as<int>()/vm["Py"].as<int>()) )
+        int Nx_last = vm["Nx"].as<int>() - (vm["Px"].as<int>()-1) * Nx_sub;      // last domain takes over leftover points
+        int Ny_last = vm["Ny"].as<int>() - (vm["Py"].as<int>()-1) * Ny_sub;*/
+        
+        // add elements depending on the position in the cartesian grid
+       
+       
+        
+                
 
+         /*// this ends up meaning that if we use a really course domain and loads of processes it will fail (could check and if that's the case 
+            // use floor instead!!
             // define subdomain grid sizes
+            
             
             int Nx_sub = ceil( (1.0 * vm["Nx"].as<int>()/vm["Px"].as<int>()) );       
             cout << Nx_sub << endl;
@@ -165,7 +198,40 @@ int main(int ac, char **av)
             int Nx_last = vm["Nx"].as<int>() - (vm["Px"].as<int>()-1) * Nx_sub;      // last domain takes over leftover points
             cout << "last domain takes " << Nx_last << endl;
             
-            int Ny_last = vm["Ny"].as<int>() - (vm["Py"].as<int>()-1) * Ny_sub;
+            int Ny_last = vm["Ny"].as<int>() - (vm["Py"].as<int>()-1) * Ny_sub;*/
+            
+            
+            
+            //double dx = vm["Lx"].as<double>() / ( vm["Nx"].as<int>() - 1 );
+            //double dy = vm["Ly"].as<double>() / ( vm["Ny"].as<int>() - 1 );
+            
+            
+       /*      // Asign appropriate sizes to subdomains
+        if ( coords[0] != ( vm["Px"].as<int>() - 1 ) && ( coords[1] != vm["Py"].as<int>() - 1 ) )
+            {
+                solver -> SetGridSize(Nx_sub,Ny_sub);
+                cout << "hi" << rank << endl; 
+            }
+        else if ( (rank >= vm["Py"].as<int>() * (vm["Px"].as<int>() - 1)) && ((rank+1) % vm["Py"].as<int>() != 0) )
+            {
+                solver -> SetGridSize(Nx_last,Ny_sub);
+                cout << "dick" << rank << endl; 
+            }
+        else if ( (rank < vm["Py"].as<int>() * (vm["Px"].as<int>() - 1) ) && ((rank+1) % vm["Py"].as<int>() == 0) )
+            {
+                solver -> SetGridSize(Nx_sub,Ny_last);
+                cout << "dog" << rank << endl;
+            }
+        else
+            {
+                solver -> SetGridSize(Nx_last,Ny_last);
+                cout << "cat" << rank << endl;
+            } */
+            
+
+            
+            
+            
         
     
     
