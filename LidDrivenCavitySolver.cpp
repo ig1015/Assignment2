@@ -7,6 +7,7 @@ namespace po = boost::program_options;
 
 #include "LidDrivenCavity.h"
 #include <mpi.h> 
+#include "GridSetup.h"
 
 int main(int ac, char **av)
 {
@@ -129,6 +130,7 @@ int main(int ac, char **av)
         }
         catch(exception& e) {
             cerr << "error: " << e.what() << "\n";
+            MPI_Finalize();
             return 1;
         }
         catch(...) {
@@ -156,6 +158,8 @@ int main(int ac, char **av)
         
         int Px = vm["Px"].as<int>();
         int Py = vm["Py"].as<int>();
+        double dx = vm["Lx"].as<double>() / ( vm["Nx"].as<int>() - 1 );
+        double dy = vm["Ly"].as<double>() / ( vm["Ny"].as<int>() - 1 );
         
         // Creat object for each subdomain - addd parameters which are common to all subdomains
         LidDrivenCavity* solver = new LidDrivenCavity();
@@ -177,20 +181,18 @@ int main(int ac, char **av)
         MPI_Cart_coords(mygrid, rank, dims, coord);
         
         //get sizes of each domain
-        int Nx_sub = ceil( (1.0 * vm["Nx"].as<int>()/vm["Px"].as<int>()) ) +2;  // 2 added for boundary points  
+        /*int Nx_sub = ceil( (1.0 * vm["Nx"].as<int>()/vm["Px"].as<int>()) ) +2;  // 2 added for boundary points  
         int Ny_sub = ceil( (1.0*vm["Ny"].as<int>()/vm["Py"].as<int>()) ) + 2;
         int Nx_last = vm["Nx"].as<int>() - (vm["Px"].as<int>()-1) * (Nx_sub-2) +1;      // last domain takes over leftover points
-        int Ny_last = vm["Ny"].as<int>() - (vm["Py"].as<int>()-1) * (Ny_sub-2) +1;
+        int Ny_last = vm["Ny"].as<int>() - (vm["Py"].as<int>()-1) * (Ny_sub-2) +1;*/
         
         
         
         // add elements depending on the position in the cartesian grid
-        int rank_com;
-        MPI_Comm_rank(MPI_COMM_WORLD, &rank_com);
         int Nx;
         int Ny;
         
-        if ( coord[0] == (Py -1)  )
+        /*if ( coord[0] == (Py -1)  )
         {
             Ny = Ny_last;
         }
@@ -216,7 +218,16 @@ int main(int ac, char **av)
         if (coord[1] == 0)
         {
             Nx -= 1;
-        }
+        }*/
+        
+    
+        GridSetup(coord,3,Px,Py,vm["Nx"].as<int>(), vm["Ny"].as<int>(),  Nx,Ny);
+        
+        solver -> SetGridSize(Nx,Ny);
+        solver -> SetDomainSize((Nx-1)*dx, (Ny-1)*dy);
+        solver -> SetCartesianCoordinates(coord[0], coord[1]);
+        
+        MPI_Finalize();
         
         cout << "coordinates: " << coord[0] << ", " << coord[1] << "size" << Nx << ":" << Ny <<endl;
         
@@ -273,7 +284,7 @@ int main(int ac, char **av)
     
     
 
-    MPI_Finalize();
+    
     
     // Chris stuff
     /*// Create a new instance of the LidDrivenCavity class
