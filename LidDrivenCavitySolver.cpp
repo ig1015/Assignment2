@@ -29,7 +29,7 @@ int main(int ac, char **av)
             po::options_description desc("Allowed options");
             desc.add_options()
                 ("help", "produce help message")
-                ("dt", po::value<double>(), "set timestep")
+                ("dt", po::value<double>()->required()->default_value(0.01), "set timestep")
                 ("T", po::value<double>(), "set total simulation time")
                 ("Nx", po::value<int>(), "set number of points in x-direction")
                 ("Ny", po::value<int>(), "set number of points in y-direction")
@@ -153,7 +153,6 @@ int main(int ac, char **av)
             
             solverMaster->Initialise();
             
-            solverMaster -> printv();
         } 
         
         int Px = vm["Px"].as<int>();
@@ -166,6 +165,7 @@ int main(int ac, char **av)
         solver -> SetTimeStep(vm["dt"].as<double>());
         solver -> SetFinalTime(vm["T"].as<double>());
         solver -> SetReynoldsNumber(vm["Re"].as<double>());
+        solver -> SetRank(rank);
         
        
         
@@ -223,13 +223,58 @@ int main(int ac, char **av)
     
         GridSetup(coord,3,Px,Py,vm["Nx"].as<int>(), vm["Ny"].as<int>(),  Nx,Ny);
         
+        // Create new rank parameters to obtain adresses of neighbours.
+        int rank_my_y;
+        int rank_my_x;
+        int rank_dest_y;
+        int rank_dest_x;
+        // asign own rank to two variables to act as rank source in the code
+        MPI_Comm_rank(MPI_COMM_WORLD, &rank_my_x);
+        MPI_Comm_rank(MPI_COMM_WORLD, &rank_my_y);
+
+        // Check y direction neighbours
+        MPI_Cart_shift(mygrid, 0, 1, &rank_my_y, &rank_dest_y);
+        // Check x direction neighbours
+        MPI_Cart_shift(mygrid, 1, 1, &rank_my_x, &rank_dest_x);
+
+        // Create Neighbours array: N, E, S, W
+        int Neighbours[4] = {rank_my_y, rank_dest_x, rank_dest_y, rank_my_x};
+        
+        if (rank == 2)
+        {
+            cout << "for coordinates " << coord[0] << " " << coord[1] << "the neighbours are ";
+            for (int i = 0 ; i<4 ; i++)
+            {
+                cout << Neighbours[i] << " ";
+            }
+            cout << endl;
+        }
+        
         solver -> SetGridSize(Nx,Ny);
         solver -> SetDomainSize((Nx-1)*dx, (Ny-1)*dy);
         solver -> SetCartesianCoordinates(coord[0], coord[1]);
+        solver -> SetNeighbours(Neighbours, 4);
+        
+        int check[4];
+        solver -> getNeighbours(check);
+        
+        if (rank == 2)
+        {
+            for (int i = 0 ; i<4 ; i++)
+            {
+                cout << check[i] << " ";
+            }
+            cout << endl;
+        }
+        
+        
+        solver -> Initialise();
+        
+        
         
         MPI_Finalize();
         
-        cout << "coordinates: " << coord[0] << ", " << coord[1] << "size" << Nx << ":" << Ny <<endl;
+        //cout << "coordinates: " << coord[0] << ", " << coord[1] << "size" << Nx << ":" << Ny <<endl;
         
                 
 
@@ -275,15 +320,6 @@ int main(int ac, char **av)
                 solver -> SetGridSize(Nx_last,Ny_last);
                 cout << "cat" << rank << endl;
             } */
-            
-
-            
-            
-            
-        
-    
-    
-
     
     
     // Chris stuff
