@@ -104,6 +104,60 @@ void LidDrivenCavity::Integrate()
         }
     }
     
+    
+    ////////////////////////////////////////////////////////////////////////
+    
+    // Send out all the relevant boundaries
+    //send to top neighbour
+    if(neigh[0] != -2)
+    {
+        MPI_Send(&vert_comm_t, Nx-2, MPI_DOUBLE, neigh[0], 0, MPI_COMM_WORLD);
+    }
+    // send to neighbout on the right
+    if(neigh[1] != -2)
+    {
+        MPI_Send(&hori_comm_r, Ny-2, MPI_DOUBLE, neigh[1], 0, MPI_COMM_WORLD);
+    }
+    // send to bottom neighbour
+    if(neigh[2] != -2)
+    {
+        MPI_Send(&vert_comm_t, Nx-2, MPI_DOUBLE, neigh[2], 0, MPI_COMM_WORLD);
+    }
+    // send to left neighbour
+    if (neigh[3] != -2)
+    {
+        MPI_Send(&hori_comm_l, Ny-2, MPI_DOUBLE, neigh[3], 0, MPI_COMM_WORLD);
+    }
+    
+    // Receive messages
+    // receive from top neighbour
+    if (neigh[0] != -2)
+    {
+        MPI_Recv(&hori_comm_l, Nx-2, MPI_DOUBLE, neigh[0], 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+    }
+    //Receive message from right neighbour
+    if (neigh[1] != -2)
+    {
+        MPI_Recv(&hori_comm_l, Ny-2, MPI_DOUBLE, neigh[1], 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+    }
+    //receive message from bottom neighbout
+    if (neigh[2] != -2)
+    {
+        MPI_Recv(&vert_comm_b, Nx-2, MPI_DOUBLE, neigh[2], 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        cout << "comms worked" << endl;
+    }
+    //Receive message from left neighbour
+    if (neigh[3] != -2)
+    {
+        MPI_Recv(&hori_comm_l, Ny-2, MPI_DOUBLE, neigh[3], 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+    }
+    
+    // Merge changes
+    
+    
+    
+    ////////////////////////////////////////////////////////////////////////////
+    
     // Calculate vorticity at time t
     for (int i=1 ; i < Nx-1 ; i++ )         //i index restricted from second to penultimate node 
     {
@@ -114,25 +168,6 @@ void LidDrivenCavity::Integrate()
         }
     }
     
-    ////////////////////////////////////////////////////////////////////////
-    
-    // Send out all the relevant boundaries
-    if(neigh[0] != -2)
-    {
-    }
-    
-    if(neigh[1] != -2)
-    {
-    }
-    
-    // If there exists a neighbour north
-    if(neigh[2] != -2)
-    {
-    }
-    
-    if (neigh[3] != -2)
-    {
-    }
     
 }
 
