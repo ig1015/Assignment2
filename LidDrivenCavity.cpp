@@ -41,14 +41,69 @@ void LidDrivenCavity::Initialise()
 {
     v = new double [Nx*Ny];
     memset(v,0,Nx*Ny*sizeof(double));
+    vNew = new double [Nx*Ny];
+    memset(vNew,0,Nx*Ny*sizeof(double));
     s = new double [Nx*Ny];
     memset(s,0,Nx*Ny*sizeof(double));
     dx = Lx / (Nx-1);
     dy = Ly / (Ny-1);
+    vert_comm_t = new double [Nx-2];             // the corner nodes are not required for communication
+    memset(vert_comm_t, 0, (Nx-2)*sizeof(double));
+    vert_comm_b = new double [Nx-2];
+    memset(vert_comm_b, 0, (Nx-2)*sizeof(double));
+    hori_comm_r = new double [Ny -2];
+    memset(hori_comm_r, 0, (Ny-2)*sizeof(double));
+    hori_comm_l = new double [Ny -2];
+    memset(hori_comm_l, 0, (Ny-2)*sizeof(double));
 }
 
 void LidDrivenCavity::Integrate()
 {
+    // Obtain vorticity at boundaries at time t
+    Boundary();
+    
+    ////////////////////////////////////////////////////////////////////////////
+    // CHECK THE INDEXING, POTENTIAL SOURC OF ERROR 
+    ////////////////////////////////////////////////////////////////////////////
+    
+    // If there exists a neighbour north
+    if(neigh[0] != -2)
+    {
+        // copy 2nd entry of each column (i.e. 2nd row) 
+        for (int i = 0 ; i < (Nx-2) ; i++)
+        {
+            vert_comm_t[i] = s[Ny*(i+1)+1];
+        }
+    }
+    
+    if(neigh[1] != -2)
+    {
+        // copy penultimate column
+        for (int i=0 ; i < (Ny-2) ; i++)
+        {
+            hori_comm_r[i] = s[(Nx-2)*Ny+i+1];
+        }
+    }
+    
+    // If there exists a neighbour north
+    if(neigh[2] != -2)
+    {
+        // copy penultimate entry of each column (i.e. 2nd row) 
+        for (int i = 0 ; i < (Nx-2) ; i++)
+        {
+            vert_comm_t[i] = s[Ny*(i+1)+(Ny-2)];
+        }
+    }
+    
+    if (neigh[3] != -2)
+    {
+        // copy 2nd column
+        for (int i = 0 ; i < (Ny -2) ; i++)
+        {
+            hori_comm_l[i] = s[Ny + i + 1];
+        }
+    }
+    
     // Calculate vorticity at time t
     for (int i=1 ; i < Nx-1 ; i++ )         //i index restricted from second to penultimate node 
     {
@@ -58,6 +113,27 @@ void LidDrivenCavity::Integrate()
                 + ( s[i*Ny + j+1] - 2 * s[i*Ny + j] + s[i*Ny + j+1] ) / (dy *dy);
         }
     }
+    
+    ////////////////////////////////////////////////////////////////////////
+    
+    // Send out all the relevant boundaries
+    if(neigh[0] != -2)
+    {
+    }
+    
+    if(neigh[1] != -2)
+    {
+    }
+    
+    // If there exists a neighbour north
+    if(neigh[2] != -2)
+    {
+    }
+    
+    if (neigh[3] != -2)
+    {
+    }
+    
 }
 
 void LidDrivenCavity::Boundary()
@@ -117,11 +193,11 @@ double LidDrivenCavity::get_Ny()
 
 void LidDrivenCavity::printv()
 {
-    for (int i = 0 ; i<Nx ; i++)
+    for (int i = 0 ; i<Ny ; i++)
     {
-        for (int j = 0 ; j<Ny ; j++)
+        for (int j = 0 ; j<Nx ; j++)
         {
-            cout << v[i*Ny + j] << " ";
+            cout << v[i + j*Ny] << " ";
         }
         cout << endl;
     }
@@ -153,4 +229,9 @@ void LidDrivenCavity::getNeighbours(int*p)
 void LidDrivenCavity::SetRank(int processRank)
 {
     rank = processRank;
+}
+
+void LidDrivenCavity::SetComms(MPI_Comm group)
+{
+    mycomms = group;
 }
