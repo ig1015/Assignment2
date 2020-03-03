@@ -45,6 +45,7 @@ void LidDrivenCavity::Initialise()
     memset(vNew,0,Nx*Ny*sizeof(double));
     s = new double [Nx*Ny];
     memset(s,0,Nx*Ny*sizeof(double));
+    //fill_n(s , Nx*Ny , rank);               // using initialise to rank to check sending
     dx = Lx / (Nx-1);
     dy = Ly / (Ny-1);
     vert_comm_t = new double [Nx-2];             // the corner nodes are not required for communication
@@ -91,7 +92,7 @@ void LidDrivenCavity::Integrate()
         // copy penultimate entry of each column (i.e. 2nd row) 
         for (int i = 0 ; i < (Nx-2) ; i++)
         {
-            vert_comm_t[i] = s[Ny*(i+1)+(Ny-2)];
+            vert_comm_b[i] = s[Ny*(i+1)+(Ny-2)];
         }
     }
     
@@ -111,45 +112,60 @@ void LidDrivenCavity::Integrate()
     //send to top neighbour
     if(neigh[0] != -2)
     {
-        MPI_Send(&vert_comm_t, Nx-2, MPI_DOUBLE, neigh[0], 0, MPI_COMM_WORLD);
+        MPI_Send(vert_comm_t, Nx-2, MPI_DOUBLE, neigh[0], 0, MPI_COMM_WORLD);
     }
     // send to neighbout on the right
     if(neigh[1] != -2)
     {
-        MPI_Send(&hori_comm_r, Ny-2, MPI_DOUBLE, neigh[1], 0, MPI_COMM_WORLD);
+        MPI_Send(hori_comm_r, Ny-2, MPI_DOUBLE, neigh[1], 0, MPI_COMM_WORLD);
     }
     // send to bottom neighbour
     if(neigh[2] != -2)
     {
-        MPI_Send(&vert_comm_t, Nx-2, MPI_DOUBLE, neigh[2], 0, MPI_COMM_WORLD);
+        MPI_Send(vert_comm_t, Nx-2, MPI_DOUBLE, neigh[2], 0, MPI_COMM_WORLD);
     }
     // send to left neighbour
     if (neigh[3] != -2)
     {
-        MPI_Send(&hori_comm_l, Ny-2, MPI_DOUBLE, neigh[3], 0, MPI_COMM_WORLD);
+        MPI_Send(hori_comm_l, Ny-2, MPI_DOUBLE, neigh[3], 0, MPI_COMM_WORLD);
     }
     
     // Receive messages
     // receive from top neighbour
     if (neigh[0] != -2)
     {
-        MPI_Recv(&hori_comm_l, Nx-2, MPI_DOUBLE, neigh[0], 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        MPI_Recv(vert_comm_t, Nx-2, MPI_DOUBLE, neigh[0], 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        for (int i = 0 ; i < (Nx-2) ; i++)
+        {
+             s[Ny*(i+1)] = vert_comm_t[i];
+        }
     }
     //Receive message from right neighbour
     if (neigh[1] != -2)
     {
-        MPI_Recv(&hori_comm_l, Ny-2, MPI_DOUBLE, neigh[1], 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        MPI_Recv(hori_comm_r, Ny-2, MPI_DOUBLE, neigh[1], 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        for (int i=0 ; i < (Ny-2) ; i++)
+        {
+             s[(Nx-1)*Ny+i+1] = hori_comm_r[i];
+        }
     }
-    //receive message from bottom neighbout
+    //receive message from bottom neighbour
     if (neigh[2] != -2)
     {
-        MPI_Recv(&vert_comm_b, Nx-2, MPI_DOUBLE, neigh[2], 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-        cout << "comms worked" << endl;
+        MPI_Recv(vert_comm_b, Nx-2, MPI_DOUBLE, neigh[2], 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        for (int i = 0 ; i < (Nx-2) ; i++)
+        {
+             s[Ny*(i+1)+(Ny-1)] = vert_comm_b[i];
+        }
     }
     //Receive message from left neighbour
     if (neigh[3] != -2)
     {
-        MPI_Recv(&hori_comm_l, Ny-2, MPI_DOUBLE, neigh[3], 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        MPI_Recv(hori_comm_l, Ny-2, MPI_DOUBLE, neigh[3], 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        for (int i = 0 ; i < (Ny -2) ; i++)
+        {
+            s[i + 1] = hori_comm_l[i];
+        }
     }
     
     // Merge changes
@@ -159,14 +175,14 @@ void LidDrivenCavity::Integrate()
     ////////////////////////////////////////////////////////////////////////////
     
     // Calculate vorticity at time t
-    for (int i=1 ; i < Nx-1 ; i++ )         //i index restricted from second to penultimate node 
+    /*for (int i=1 ; i < Nx-1 ; i++ )         //i index restricted from second to penultimate node 
     {
         for (int j=1 ; j<Ny ; j++)
         {
             v[i*Ny + j] = (s[(i+1)*Ny+j] - 2 * s[i*Ny + j] + s[(i-1)*Ny+j] ) / (dx * dx) 
                 + ( s[i*Ny + j+1] - 2 * s[i*Ny + j] + s[i*Ny + j+1] ) / (dy *dy);
         }
-    }
+    }*/
     
     
 }
@@ -179,7 +195,7 @@ void LidDrivenCavity::Boundary()
         for (int i = 0; i<Nx; i++)
         {
             // assume U=1, I*Ny -> first element in each column (Data is saved column wise)
-            v[i*Ny] = 2/ (dy*dy) * ( s[i*Ny] - s[i*Ny + 1] ) - 2 / dy;
+            v[i*Ny] = 2/ (dy*dy) * ( s[i*Ny] - s[i*Ny + 1] ) - 2 / dy ;
         }
     }
     
@@ -188,7 +204,7 @@ void LidDrivenCavity::Boundary()
     {
         for (int i = 0 ; i < Ny ; i++)
         {
-            v[(Nx-1)*Ny+i] = 2 / (dx * dx) * (s[(Nx-1)*Ny+i] - s[(Nx-2)*Ny+i]);
+            v[(Nx-1)*Ny+i] = 2 / (dx * dx) * (s[(Nx-1)*Ny+i] - s[(Nx-2)*Ny+i]) ;
         }
     }
     
@@ -197,7 +213,7 @@ void LidDrivenCavity::Boundary()
     {
         for (int i = 0; i<Nx; i++)
         {
-            v[i*Ny + (Ny - 1)] = 2 / (dy*dy) * (s[i*Ny + (Ny - 1)] - s[i*Ny + (Ny - 2)]);
+            v[i*Ny + (Ny - 1)] =  ( 2 / (dy*dy) * (s[i*Ny + (Ny - 1)] - s[i*Ny + (Ny - 2)]) );
         }
     }
     
@@ -206,7 +222,7 @@ void LidDrivenCavity::Boundary()
     {
         for (int i = 0 ; i < Ny ; i++)
         {
-            v[i] = 2 / (dx * dx) * (s[i] - s[Ny+i]);
+            v[i] = 2 / (dx * dx) * (s[i] - s[Ny+i]) ;
         }
     }
 }
@@ -233,6 +249,18 @@ void LidDrivenCavity::printv()
         for (int j = 0 ; j<Nx ; j++)
         {
             cout << v[i + j*Ny] << " ";
+        }
+        cout << endl;
+    }
+}
+
+void LidDrivenCavity::prints()
+{
+    for (int i = 0 ; i<Ny ; i++)
+    {
+        for (int j = 0 ; j<Nx ; j++)
+        {
+            cout << s[i + j*Ny] << " ";
         }
         cout << endl;
     }
