@@ -30,6 +30,7 @@ public:
     double get_Nx();
     double get_Ny();
     void printv();
+    void prints();
     void getNeighbours(int*p);
 
     // Add any other public functions
