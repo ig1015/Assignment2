@@ -45,7 +45,7 @@ void LidDrivenCavity::Initialise()
     memset(vNew,0,Nx*Ny*sizeof(double));
     s = new double [Nx*Ny];
     memset(s,0,Nx*Ny*sizeof(double));
-    //fill_n(s , Nx*Ny , rank);               // using initialise to rank to check sending
+    fill_n(s , Nx*Ny , rank);               // using initialise to rank to check sending
     dx = Lx / (Nx-1);
     dy = Ly / (Ny-1);
     vert_comm_t = new double [Nx-2];             // the corner nodes are not required for communication
@@ -63,12 +63,26 @@ void LidDrivenCavity::Integrate()
     // Obtain vorticity at boundaries at time t
     Boundary();
     
+    mySend(s);
+    
+    ////////////////////////////////////////////////////////////////////////////
+    
+    // Calculate vorticity at time t
+    for (int i=1 ; i < Nx-1 ; i++ )         //i index restricted from second to penultimate node 
+    {
+        for (int j=1 ; j<Ny-1 ; j++)
+        {
+            v[i*Ny + j] = (s[(i+1)*Ny+j] - 2 * s[i*Ny + j] + s[(i-1)*Ny+j] ) / (dx * dx) 
+                + ( s[i*Ny + j+1] - 2 * s[i*Ny + j] + s[i*Ny + j+1] ) / (dy *dy);
+        }
+    }
+    
     ////////////////////////////////////////////////////////////////////////////
     // CHECK THE INDEXING, POTENTIAL SOURC OF ERROR 
     ////////////////////////////////////////////////////////////////////////////
     
     // If there exists a neighbour north
-    if(neigh[0] != -2)
+    /*if(neigh[0] != -2)
     {
         // copy 2nd entry of each column (i.e. 2nd row) 
         for (int i = 0 ; i < (Nx-2) ; i++)
@@ -167,25 +181,115 @@ void LidDrivenCavity::Integrate()
             s[i + 1] = hori_comm_l[i];
         }
     }
-    
+    */
     // Merge changes
     
     
     
-    ////////////////////////////////////////////////////////////////////////////
     
-    // Calculate vorticity at time t
-    /*for (int i=1 ; i < Nx-1 ; i++ )         //i index restricted from second to penultimate node 
-    {
-        for (int j=1 ; j<Ny ; j++)
-        {
-            v[i*Ny + j] = (s[(i+1)*Ny+j] - 2 * s[i*Ny + j] + s[(i-1)*Ny+j] ) / (dx * dx) 
-                + ( s[i*Ny + j+1] - 2 * s[i*Ny + j] + s[i*Ny + j+1] ) / (dy *dy);
-        }
-    }*/
     
     
 }
+
+void LidDrivenCavity::mySend(double * ar)
+{
+     if(neigh[0] != -2)
+    {
+        // copy 2nd entry of each column (i.e. 2nd row) 
+        for (int i = 0 ; i < (Nx-2) ; i++)
+        {
+            vert_comm_t[i] = ar[Ny*(i+1)+1];
+        }
+    }
+    
+    if(neigh[1] != -2)
+    {
+        // copy penultimate column
+        for (int i=0 ; i < (Ny-2) ; i++)
+        {
+            hori_comm_r[i] = ar[(Nx-2)*Ny+i+1];
+        }
+    }
+    
+    // If there exists a neighbour north
+    if(neigh[2] != -2)
+    {
+        // copy penultimate entry of each column (i.e. 2nd row) 
+        for (int i = 0 ; i < (Nx-2) ; i++)
+        {
+            vert_comm_b[i] = ar[Ny*(i+1)+(Ny-2)];
+        }
+    }
+    
+    if (neigh[3] != -2)
+    {
+        // copy 2nd column
+        for (int i = 0 ; i < (Ny -2) ; i++)
+        {
+            hori_comm_l[i] = ar[Ny + i + 1];
+        }
+    }
+   // Send out all the relevant boundaries
+    //send to top neighbour
+    if(neigh[0] != -2)
+    {
+        MPI_Send(vert_comm_t, Nx-2, MPI_DOUBLE, neigh[0], 0, MPI_COMM_WORLD);
+    }
+    // send to neighbout on the right
+    if(neigh[1] != -2)
+    {
+        MPI_Send(hori_comm_r, Ny-2, MPI_DOUBLE, neigh[1], 0, MPI_COMM_WORLD);
+    }
+    // send to bottom neighbour
+    if(neigh[2] != -2)
+    {
+        MPI_Send(vert_comm_t, Nx-2, MPI_DOUBLE, neigh[2], 0, MPI_COMM_WORLD);
+    }
+    // send to left neighbour
+    if (neigh[3] != -2)
+    {
+        MPI_Send(hori_comm_l, Ny-2, MPI_DOUBLE, neigh[3], 0, MPI_COMM_WORLD);
+    }
+    
+    // Receive messages
+    // receive from top neighbour
+    if (neigh[0] != -2)
+    {
+        MPI_Recv(vert_comm_t, Nx-2, MPI_DOUBLE, neigh[0], 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        for (int i = 0 ; i < (Nx-2) ; i++)
+        {
+             ar[Ny*(i+1)] = vert_comm_t[i];
+        }
+    }
+    //Receive message from right neighbour
+    if (neigh[1] != -2)
+    {
+        MPI_Recv(hori_comm_r, Ny-2, MPI_DOUBLE, neigh[1], 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        for (int i=0 ; i < (Ny-2) ; i++)
+        {
+             ar[(Nx-1)*Ny+i+1] = hori_comm_r[i];
+        }
+    }
+    //receive message from bottom neighbour
+    if (neigh[2] != -2)
+    {
+        MPI_Recv(vert_comm_b, Nx-2, MPI_DOUBLE, neigh[2], 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        for (int i = 0 ; i < (Nx-2) ; i++)
+        {
+             ar[Ny*(i+1)+(Ny-1)] = vert_comm_b[i];
+        }
+    }
+    //Receive message from left neighbour
+    if (neigh[3] != -2)
+    {
+        MPI_Recv(hori_comm_l, Ny-2, MPI_DOUBLE, neigh[3], 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        for (int i = 0 ; i < (Ny -2) ; i++)
+        {
+            ar[i + 1] = hori_comm_l[i];
+        }
+    }
+}
+
 
 void LidDrivenCavity::Boundary()
 {
