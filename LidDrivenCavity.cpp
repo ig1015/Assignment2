@@ -2,6 +2,18 @@
 #include <cstring>
 #include <iostream>
 
+#define F77NAME(x) x##_
+
+extern "C" {
+void F77NAME(dpbsv) (
+const char& UPLO,
+const int& n, const int& kd,
+const int& nrhs,
+const double* A, const int& ldab,
+const double* y, const int& ldb,
+const int& info);
+}
+
 LidDrivenCavity::LidDrivenCavity()
 {
 }
@@ -41,10 +53,12 @@ void LidDrivenCavity::Initialise()
 {
     v = new double [Nx*Ny];
     memset(v,0,Nx*Ny*sizeof(double));
-    vNew = new double [Nx*Ny];
-    memset(vNew,0,Nx*Ny*sizeof(double));
+    vNew = new double [(Nx-2)*(Ny-2)];
+    memset(vNew,0,(Nx-2)*(Ny-2)*sizeof(double));
     s = new double [Nx*Ny];
     memset(s,0,Nx*Ny*sizeof(double));
+    A = new double [(Nx-2)*(Ny-2)*(Ny-1)];
+    memset(A, 0, (Nx-2)*(Ny-2)*(Ny-1)*sizeof(double));
     fill_n(s , Nx*Ny , rank);               // using initialise to rank to check sending
     dx = Lx / (Nx-1);
     dy = Ly / (Ny-1);
@@ -60,6 +74,7 @@ void LidDrivenCavity::Initialise()
 
 void LidDrivenCavity::Integrate()
 {
+
     // Obtain vorticity at boundaries at time t
     Boundary();
     
@@ -73,120 +88,92 @@ void LidDrivenCavity::Integrate()
         for (int j=1 ; j<Ny-1 ; j++)
         {
             v[i*Ny + j] = (s[(i+1)*Ny+j] - 2 * s[i*Ny + j] + s[(i-1)*Ny+j] ) / (dx * dx) 
-                + ( s[i*Ny + j+1] - 2 * s[i*Ny + j] + s[i*Ny + j+1] ) / (dy *dy);
+                + ( s[i*Ny + j+1] - 2 * s[i*Ny + j] + s[i*Ny + j-1] ) / (dy *dy);
         }
     }
     
-    ////////////////////////////////////////////////////////////////////////////
-    // CHECK THE INDEXING, POTENTIAL SOURC OF ERROR 
-    ////////////////////////////////////////////////////////////////////////////
+    mySend(v);
     
-    // If there exists a neighbour north
-    /*if(neigh[0] != -2)
+    //////////////////////////////////////////////////////////////////////////
+    
+    for (int i=1 ; i < Nx-1 ; i++ )         //i index restricted from second to penultimate node 
     {
-        // copy 2nd entry of each column (i.e. 2nd row) 
-        for (int i = 0 ; i < (Nx-2) ; i++)
+        for (int j=1 ; j<Ny-1 ; j++)
         {
-            vert_comm_t[i] = s[Ny*(i+1)+1];
+            vNew[(i-1)*(Ny-2) + (j-1)] = v[i*Ny + j] + dt * (  1 / Re * ( (v[(i+1)*Ny+j] - 2 * v[i*Ny + j] + v[(i-1)*Ny+j] ) / (dx * dx) 
+                + ( v[i*Ny + j+1] - 2 * v[i*Ny + j] + v[i*Ny + j-1] ) / (dy *dy)  ) 
+                    - ( ( ( s[i*Ny + j+1] - s[i*Ny + j-1] ) / 2 / dy ) * ( ( v[(i+1)*Ny+j] - v[(i-1)*Ny+j] ) / 2 /dx ) )
+                        + ( ( ( v[i*Ny + j+1] - v[i*Ny + j-1] ) / 2 / dy ) * ( ( s[(i+1)*Ny+j] - s[(i-1)*Ny+j] ) / 2 /dx ) ) );
         }
     }
     
-    if(neigh[1] != -2)
+    // set new vorticity value
+    
+    for (int i=1 ; i < Nx-1 ; i++ )         //i index restricted from second to penultimate node 
     {
-        // copy penultimate column
-        for (int i=0 ; i < (Ny-2) ; i++)
+        for (int j=1 ; j<Ny-1 ; j++)
         {
-            hori_comm_r[i] = s[(Nx-2)*Ny+i+1];
+            v[i*Ny + j] = vNew[(i-1)*(Ny-2) + (j-1)];
         }
     }
     
-    // If there exists a neighbour north
-    if(neigh[2] != -2)
+    /////////////////////////////////////////////////////////////////////////////////////////////
+    
+    // build coefficient matrix
+    
+    int Ny_r = Ny-1;
+    
+    for (int i = 0 ; i < (Nx-2)*(Ny-2) ; i++)
     {
-        // copy penultimate entry of each column (i.e. 2nd row) 
-        for (int i = 0 ; i < (Nx-2) ; i++)
+        for (int j = 0 ; j < (Ny_r) ; j++)
         {
-            vert_comm_b[i] = s[Ny*(i+1)+(Ny-2)];
+            if (j == (Ny_r-1) )
+            {
+                A[i*(Ny_r) + j] = 2 / dx /dx + 2/ dy /dy;
+            }
+            if ( (j ==(Ny_r -2)) && ( (i < 1) || i % (Ny-2) != 0 ) && i>0 )
+            {
+                A[i*(Ny_r) + j] = -1/ dy / dy;
+            }
+            if (j == 0 && i > (Ny-3))
+            {
+                A[i*(Ny_r) + j] = -1 / dx /dx;
+            }
         }
     }
     
-    if (neigh[3] != -2)
+    cout << "Coefficient matrix" << endl;
+    
+    for (int j = 0 ; j < (Ny_r) ; j++)
     {
-        // copy 2nd column
-        for (int i = 0 ; i < (Ny -2) ; i++)
+         for (int i = 0 ; i < (Nx-2)*(Ny-2) ; i++)
+        {  
+            cout.width(4);
+            cout << A[i*(Ny_r)+j] << " ";
+        }
+        cout << endl;
+    }
+    ///////////////////////////////////////////////////////////////////////////////////////
+    
+    // Solve equation
+    
+    int info = 0;
+
+    
+    F77NAME(dpbsv)('U', (Ny-2) * (Nx-2), (Ny-2), 1, A, (Ny-1), vNew, (Ny-2)*(Nx-2), info);
+    
+    for (int i=1 ; i < Nx-1 ; i++ )         //i index restricted from second to penultimate node 
+    {
+        for (int j=1 ; j<Ny-1 ; j++)
         {
-            hori_comm_l[i] = s[Ny + i + 1];
+            s[i*Ny + j] = vNew[(i-1)*(Ny-2) + (j-1)];
         }
     }
     
+    cout << "check" << endl;
     
-    ////////////////////////////////////////////////////////////////////////
-    
-    // Send out all the relevant boundaries
-    //send to top neighbour
-    if(neigh[0] != -2)
-    {
-        MPI_Send(vert_comm_t, Nx-2, MPI_DOUBLE, neigh[0], 0, MPI_COMM_WORLD);
-    }
-    // send to neighbout on the right
-    if(neigh[1] != -2)
-    {
-        MPI_Send(hori_comm_r, Ny-2, MPI_DOUBLE, neigh[1], 0, MPI_COMM_WORLD);
-    }
-    // send to bottom neighbour
-    if(neigh[2] != -2)
-    {
-        MPI_Send(vert_comm_t, Nx-2, MPI_DOUBLE, neigh[2], 0, MPI_COMM_WORLD);
-    }
-    // send to left neighbour
-    if (neigh[3] != -2)
-    {
-        MPI_Send(hori_comm_l, Ny-2, MPI_DOUBLE, neigh[3], 0, MPI_COMM_WORLD);
-    }
-    
-    // Receive messages
-    // receive from top neighbour
-    if (neigh[0] != -2)
-    {
-        MPI_Recv(vert_comm_t, Nx-2, MPI_DOUBLE, neigh[0], 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-        for (int i = 0 ; i < (Nx-2) ; i++)
-        {
-             s[Ny*(i+1)] = vert_comm_t[i];
-        }
-    }
-    //Receive message from right neighbour
-    if (neigh[1] != -2)
-    {
-        MPI_Recv(hori_comm_r, Ny-2, MPI_DOUBLE, neigh[1], 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-        for (int i=0 ; i < (Ny-2) ; i++)
-        {
-             s[(Nx-1)*Ny+i+1] = hori_comm_r[i];
-        }
-    }
-    //receive message from bottom neighbour
-    if (neigh[2] != -2)
-    {
-        MPI_Recv(vert_comm_b, Nx-2, MPI_DOUBLE, neigh[2], 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-        for (int i = 0 ; i < (Nx-2) ; i++)
-        {
-             s[Ny*(i+1)+(Ny-1)] = vert_comm_b[i];
-        }
-    }
-    //Receive message from left neighbour
-    if (neigh[3] != -2)
-    {
-        MPI_Recv(hori_comm_l, Ny-2, MPI_DOUBLE, neigh[3], 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-        for (int i = 0 ; i < (Ny -2) ; i++)
-        {
-            s[i + 1] = hori_comm_l[i];
-        }
-    }
-    */
-    // Merge changes
-    
-    
-    
-    
+    cout << info << endl;
+    cout << endl;
     
     
 }
@@ -364,6 +351,7 @@ void LidDrivenCavity::prints()
     {
         for (int j = 0 ; j<Nx ; j++)
         {
+            cout.width(10);
             cout << s[i + j*Ny] << " ";
         }
         cout << endl;
@@ -402,3 +390,116 @@ void LidDrivenCavity::SetComms(MPI_Comm group)
 {
     mycomms = group;
 }
+
+
+// All the MPI stuff now in function
+
+////////////////////////////////////////////////////////////////////////////
+    // CHECK THE INDEXING, POTENTIAL SOURC OF ERROR 
+    ////////////////////////////////////////////////////////////////////////////
+    
+    // If there exists a neighbour north
+    /*if(neigh[0] != -2)
+    {
+        // copy 2nd entry of each column (i.e. 2nd row) 
+        for (int i = 0 ; i < (Nx-2) ; i++)
+        {
+            vert_comm_t[i] = s[Ny*(i+1)+1];
+        }
+    }
+    
+    if(neigh[1] != -2)
+    {
+        // copy penultimate column
+        for (int i=0 ; i < (Ny-2) ; i++)
+        {
+            hori_comm_r[i] = s[(Nx-2)*Ny+i+1];
+        }
+    }
+    
+    // If there exists a neighbour north
+    if(neigh[2] != -2)
+    {
+        // copy penultimate entry of each column (i.e. 2nd row) 
+        for (int i = 0 ; i < (Nx-2) ; i++)
+        {
+            vert_comm_b[i] = s[Ny*(i+1)+(Ny-2)];
+        }
+    }
+    
+    if (neigh[3] != -2)
+    {
+        // copy 2nd column
+        for (int i = 0 ; i < (Ny -2) ; i++)
+        {
+            hori_comm_l[i] = s[Ny + i + 1];
+        }
+    }
+    
+    
+    ////////////////////////////////////////////////////////////////////////
+    
+    // Send out all the relevant boundaries
+    //send to top neighbour
+    if(neigh[0] != -2)
+    {
+        MPI_Send(vert_comm_t, Nx-2, MPI_DOUBLE, neigh[0], 0, MPI_COMM_WORLD);
+    }
+    // send to neighbout on the right
+    if(neigh[1] != -2)
+    {
+        MPI_Send(hori_comm_r, Ny-2, MPI_DOUBLE, neigh[1], 0, MPI_COMM_WORLD);
+    }
+    // send to bottom neighbour
+    if(neigh[2] != -2)
+    {
+        MPI_Send(vert_comm_t, Nx-2, MPI_DOUBLE, neigh[2], 0, MPI_COMM_WORLD);
+    }
+    // send to left neighbour
+    if (neigh[3] != -2)
+    {
+        MPI_Send(hori_comm_l, Ny-2, MPI_DOUBLE, neigh[3], 0, MPI_COMM_WORLD);
+    }
+    
+    // Receive messages
+    // receive from top neighbour
+    if (neigh[0] != -2)
+    {
+        MPI_Recv(vert_comm_t, Nx-2, MPI_DOUBLE, neigh[0], 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        for (int i = 0 ; i < (Nx-2) ; i++)
+        {
+             s[Ny*(i+1)] = vert_comm_t[i];
+        }
+    }
+    //Receive message from right neighbour
+    if (neigh[1] != -2)
+    {
+        MPI_Recv(hori_comm_r, Ny-2, MPI_DOUBLE, neigh[1], 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        for (int i=0 ; i < (Ny-2) ; i++)
+        {
+             s[(Nx-1)*Ny+i+1] = hori_comm_r[i];
+        }
+    }
+    //receive message from bottom neighbour
+    if (neigh[2] != -2)
+    {
+        MPI_Recv(vert_comm_b, Nx-2, MPI_DOUBLE, neigh[2], 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        for (int i = 0 ; i < (Nx-2) ; i++)
+        {
+             s[Ny*(i+1)+(Ny-1)] = vert_comm_b[i];
+        }
+    }
+    //Receive message from left neighbour
+    if (neigh[3] != -2)
+    {
+        MPI_Recv(hori_comm_l, Ny-2, MPI_DOUBLE, neigh[3], 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        for (int i = 0 ; i < (Ny -2) ; i++)
+        {
+            s[i + 1] = hori_comm_l[i];
+        }
+    }
+    */
+    // Merge changes
+    
+    
+    
