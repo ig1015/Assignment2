@@ -1,4 +1,5 @@
 #include "LidDrivenCavity.h"
+#include "PoissonSolver.h"
 #include <cstring>
 #include <iostream>
 
@@ -76,8 +77,13 @@ void LidDrivenCavity::Integrate()
 {
     int k, info, Ny_r;
     double timer = 0;
+    
+    PoissonSolver* Poisson = new PoissonSolver(Nx-2, Ny-2, dx ,dy);
+    Poisson -> Initialise();
+    
     while (timer < T)
     {
+    cout << timer << " out of " << T << endl;
         // Obtain vorticity at boundaries at time t
     Boundary();
     
@@ -139,7 +145,7 @@ void LidDrivenCavity::Integrate()
     
     // build coefficient matrix
     
-    Ny_r = Ny-1;
+    /*Ny_r = Ny-1;
     
     memset(A, 0, (Nx-2)*(Ny-2)*(Ny-1)*sizeof(double));
     
@@ -160,9 +166,9 @@ void LidDrivenCavity::Integrate()
                 A[i*(Ny_r) + j] = -1 / dx /dx;
             }
         }
-    }
+    }*/
     
-    cout << "A" << endl;
+    /*cout << "A" << endl;
     for (int j = 0 ; j<(Ny_r) ; j++)
     {
         for (int i = 0 ; i<(Nx-2)*(Ny-2) ; i++)
@@ -171,7 +177,7 @@ void LidDrivenCavity::Integrate()
             cout << A[i*Ny_r + j] << " ";
         }
         cout << endl;
-    }
+    }*/
     
     
 
@@ -179,9 +185,11 @@ void LidDrivenCavity::Integrate()
     
     // Solve equation
     
-    info = 0;
+   /* info = 0;
 
-    F77NAME(dpbsv)('U', (Ny-2) * (Nx-2), (Ny-2), 1, A, (Ny-1), vNew, (Ny-2)*(Nx-2), info);
+    F77NAME(dpbsv)('U', (Ny-2) * (Nx-2), (Ny-2), 1, A, (Ny-1), vNew, (Ny-2)*(Nx-2), info); */
+    
+    Poisson -> Integrate(vNew);
     
     k = 0;
     for (int i=1 ; i < Nx-1 ; i++ )         //i index restricted from second to penultimate node 
@@ -201,6 +209,9 @@ void LidDrivenCavity::Integrate()
     
     timer += dt;
     }
+    
+
+    
     
     
     
@@ -307,47 +318,7 @@ void LidDrivenCavity::mySend(double * ar)
 
 
 void LidDrivenCavity::Boundary()
-{
-    
-    
-    /*// top boundary
-    if (neigh[0] == -2)
-    {
-        for (int i = 0; i<Nx; i++)
-        {
-            // assume U=1, I*Ny -> first element in each column (Data is saved column wise)
-            v[i*Ny + (Ny - 1)] =   2.0 / dy/dy * (s[i*Ny + (Ny - 1)] - s[i*Ny + (Ny - 2)]) - 2.0 / dy;
-        }
-    }
-    
-    // bottom boundary
-    if (neigh[2] == -2)
-    {
-        for (int i = 0; i<Nx; i++)
-        {
-            v[i*Ny] = 2.0/ (dy*dy) * ( s[i*Ny] - s[i*Ny + 1] ) ;
-        }
-    }
-    
-    // right boundary
-    if (neigh[1] == -2)
-    {
-        for (int i = 0 ; i < Ny ; i++)
-        {
-            v[(Nx-1)*Ny+i] = 2.0 / dx / dx * (s[(Nx-1)*Ny+i] - s[(Nx-2)*Ny+i]) ;
-        }
-    }
-    
-    if (neigh[3] == -2)
-    {
-        for (int i = 0 ; i < Ny ; i++)
-        {
-            v[i] = 2.0 / dx / dx * (s[i] - s[Ny+i]) ;
-        }
-    }*/
-     
-     
-    
+{   
     
       // top boundary
     if (neigh[0] == -2)
