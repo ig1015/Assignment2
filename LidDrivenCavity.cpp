@@ -74,13 +74,15 @@ void LidDrivenCavity::Initialise()
 
 void LidDrivenCavity::Integrate()
 {
+    int k, info, Ny_r;
     double timer = 0;
     while (timer < T)
     {
         // Obtain vorticity at boundaries at time t
     Boundary();
     
-    mySend(s);
+    // why is this here 
+    //mySend(s);
     
     ////////////////////////////////////////////////////////////////////////////
     
@@ -99,14 +101,14 @@ void LidDrivenCavity::Integrate()
     mySend(v);
     
     //////////////////////////////////////////////////////////////////////////
-    int k = 0;
+    k = 0;
     for (int i=1 ; i < Nx-1 ; i++ )         //i index restricted from second to penultimate node 
     {
         for (int j=1 ; j<Ny-1 ; j++)
         {
-            vNew[k] = v[i*Ny+j] - dt * (s[i*Ny+j+1] - s[i*Ny+j-1])  
+            vNew[k] = v[i*Ny+j] + dt * (s[i*Ny+j+1] - s[i*Ny+j-1])  
                 * (v[(i+1)*Ny+j] - v[(i-1)*Ny+j]) / 4.0 / dx /dy  
-                + dt * (s[(i+1)*Ny+j] - s[(i-1)*Ny+j]) * (v[i*Ny+j+1] 
+                - dt * (s[(i+1)*Ny+j] - s[(i-1)*Ny+j]) * (v[i*Ny+j+1] 
                 - v[i*Ny+j-1]) / 4.0 / dx /dy 
                 + dt / Re * ( (v[(i+1)*Ny+j] - 2.0 * v[i*Ny + j] + v[(i-1)*Ny+j] ) / dx / dx 
                 + ( v[i*Ny + j+1] - 2.0 * v[i*Ny + j] + v[i*Ny + j-1] ) / dy / dy );
@@ -137,7 +139,7 @@ void LidDrivenCavity::Integrate()
     
     // build coefficient matrix
     
-    int Ny_r = Ny-1;
+    Ny_r = Ny-1;
     
     memset(A, 0, (Nx-2)*(Ny-2)*(Ny-1)*sizeof(double));
     
@@ -177,9 +179,8 @@ void LidDrivenCavity::Integrate()
     
     // Solve equation
     
-    int info = 0;
+    info = 0;
 
-    
     F77NAME(dpbsv)('U', (Ny-2) * (Nx-2), (Ny-2), 1, A, (Ny-1), vNew, (Ny-2)*(Nx-2), info);
     
     k = 0;
@@ -309,7 +310,7 @@ void LidDrivenCavity::Boundary()
 {
     
     
-    // top boundary
+    /*// top boundary
     if (neigh[0] == -2)
     {
         for (int i = 0; i<Nx; i++)
@@ -343,11 +344,11 @@ void LidDrivenCavity::Boundary()
         {
             v[i] = 2.0 / dx / dx * (s[i] - s[Ny+i]) ;
         }
-    }
+    }*/
      
      
     
-    /*
+    
       // top boundary
     if (neigh[0] == -2)
     {
@@ -384,7 +385,7 @@ void LidDrivenCavity::Boundary()
             v[i] = 2 / dx / dx * (s[i] - s[Ny+i]) ;
         }
     }
-     */
+     
     
 }
 
